@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "hf/boot_params.h"
+
 /**
  * Performs arch specific boot time initialization.
  *
@@ -15,3 +17,8 @@
  * possible.
  */
 void arch_one_time_init(void);
+
+/**
+ * Sets up secondary cores.
+ */
+void arch_psci_secondary_core_init(const struct boot_params *params);

@@ -20,3 +20,5 @@ bool arch_other_world_is_direct_request_valid(struct vcpu *current,
 bool arch_other_world_is_direct_response_valid(struct vcpu *current,
 					       ffa_vm_id_t sender_vm_id,
 					       ffa_vm_id_t receiver_vm_id);
+void arch_other_world_init_ffa_id(void);
+ffa_vm_id_t arch_other_world_get_ffa_id(void);

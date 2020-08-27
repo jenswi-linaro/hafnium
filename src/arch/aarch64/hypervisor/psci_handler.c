@@ -10,10 +10,13 @@
 
 #include <stdint.h>
 
+#include "hf/arch/other_world.h"
 #include "hf/arch/plat/psci.h"
+#include "hf/arch/spmd_helpers.h"
 #include "hf/arch/types.h"
 
 #include "hf/api.h"
+#include "hf/boot_params.h"
 #include "hf/cpu.h"
 #include "hf/dlog.h"
 #include "hf/ffa.h"
@@ -53,6 +56,41 @@ void arch_one_time_init(void)
 	}
 #else
 	el3_psci_version = PSCI_VERSION_1_1;
+
+	arch_other_world_init_ffa_id();
+#endif
+}
+
+/**
+ * Register secondary physical core entry points to the SPMD.
+ */
+void arch_psci_secondary_core_init(const struct boot_params *params)
+{
+#if SECURE_WORLD == 1
+	struct ffa_value res;
+
+	for (uint32_t count = 0; count < params->cpu_count; count++) {
+		uint32_t id = params->cpu_ids[count];
+		struct cpu *cpu = cpu_find(id);
+		const ffa_vm_id_t ffa_id = arch_other_world_get_ffa_id();
+
+		res = smc_ffa_call((struct ffa_value){
+			.func = FFA_MSG_SEND_DIRECT_REQ_32,
+			.arg1 = ((uint64_t)ffa_id << 16) | SPMD_ID,
+			.arg3 = SPMD_DIRECT_MSG_SET_ENTRY_POINT,
+			.arg4 = params->cpu_ids[count],
+			.arg5 = (uintreg_t)&cpu_entry,
+			.arg6 = (uintreg_t)cpu});
+
+		if (res.func != FFA_SUCCESS_32) {
+			dlog_warning(
+				"%s Failed to initialize secondary core ID: "
+				"%u\n",
+				__func__, id);
+		}
+
+		dlog_verbose("SPMD EP register returned %#x\n", res.func);
+	}
 #endif
 }
 
@@ -353,11 +391,13 @@ bool psci_secondary_vm_handler(struct vcpu *vcpu, uint32_t func, uintreg_t arg0,
 
 		if (vcpu_secondary_reset_and_start(
 			    target_vcpu, entry_point_address, context_id)) {
+#if SECURE_WORLD == 0
 			/*
 			 * Tell the scheduler that it can start running the new
 			 * vCPU now.
 			 */
 			*next = api_wake_up(vcpu, target_vcpu);
+#endif
 			*ret = PSCI_RETURN_SUCCESS;
 		} else {
 			*ret = PSCI_ERROR_ALREADY_ON;

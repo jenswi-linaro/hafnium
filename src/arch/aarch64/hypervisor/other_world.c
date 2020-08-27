@@ -23,6 +23,10 @@
 alignas(PAGE_SIZE) static uint8_t other_world_send_buffer[HF_MAILBOX_SIZE];
 alignas(PAGE_SIZE) static uint8_t other_world_recv_buffer[HF_MAILBOX_SIZE];
 
+#else
+
+static ffa_vm_id_t physical_ffa_id;
+
 #endif
 
 void arch_other_world_init(void)
@@ -181,3 +185,28 @@ struct ffa_value arch_other_world_call(struct ffa_value args)
 {
 	return smc_ffa_call(args);
 }
+
+#if SECURE_WORLD == 1
+
+ffa_vm_id_t arch_other_world_get_ffa_id(void)
+{
+	return physical_ffa_id;
+}
+
+void arch_other_world_init_ffa_id(void)
+{
+	struct ffa_value res =
+		smc_ffa_call((struct ffa_value){.func = FFA_ID_GET_32});
+
+	if (res.func != FFA_SUCCESS_32) {
+		dlog_error("%s Failed to get SPMC's FFA-ID from SPMD.\n",
+			   __func__);
+		physical_ffa_id = HF_INVALID_VM_ID;
+		return;
+	}
+	physical_ffa_id = res.arg2 & 0xFFFF;
+
+	CHECK(physical_ffa_id == HF_TEE_VM_ID);
+}
+
+#endif

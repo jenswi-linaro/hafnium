@@ -138,7 +138,7 @@ bool cpu_on(struct cpu *c, ipaddr_t entry, uintreg_t arg)
 	c->is_on = true;
 	sl_unlock(&c->lock);
 
-	if (!prev) {
+	if (!prev && vm_id_is_current_world(HF_PRIMARY_VM_ID)) {
 		struct vm *vm = vm_find(HF_PRIMARY_VM_ID);
 		struct vcpu *vcpu = vm_get_vcpu(vm, cpu_index(c));
 		struct vcpu_locked vcpu_locked;

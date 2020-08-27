@@ -146,6 +146,8 @@ void one_time_init(void)
 
 	cpu_module_init(params.cpu_ids, params.cpu_count);
 
+	arch_psci_secondary_core_init(&params);
+
 	/* Load all VMs. */
 	update.reserved_ranges_count = 0;
 	if (!load_vms(mm_stage1_locked, &manifest, &cpio, &params, &update,
