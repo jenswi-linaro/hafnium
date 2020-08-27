@@ -86,6 +86,8 @@ struct vcpu {
 	 * a result of a prior FFA_MSG_SEND_DIRECT_REQ invocation.
 	 */
 	ffa_vm_id_t direct_request_origin_vm_id;
+
+	ipaddr_t psci_handler[1];
 };
 
 /** Encapsulates a vCPU whose lock is held. */

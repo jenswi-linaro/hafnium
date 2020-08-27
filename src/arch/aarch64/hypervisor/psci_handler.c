@@ -389,6 +389,8 @@ bool psci_secondary_vm_handler(struct vcpu *vcpu, uint32_t func, uintreg_t arg0,
 
 		target_vcpu = vm_get_vcpu(vm, target_vcpu_index);
 
+		target_vcpu->psci_handler[0] = entry_point_address;
+
 		if (vcpu_secondary_reset_and_start(
 			    target_vcpu, entry_point_address, context_id)) {
 #if SECURE_WORLD == 0
