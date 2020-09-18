@@ -13,6 +13,7 @@
 #include "hf/arch/mmu.h"
 #include "hf/arch/other_world.h"
 #include "hf/arch/plat/smc.h"
+#include "hf/arch/spmd_helpers.h"
 
 #include "hf/api.h"
 #include "hf/check.h"
@@ -261,6 +262,7 @@ static void set_virtual_interrupt_current(bool enable)
 }
 
 #if SECURE_WORLD == 1
+
 static bool sp_boot_next(struct vcpu *current, struct vcpu **next,
 			 struct ffa_value *ffa_ret)
 {
@@ -303,6 +305,41 @@ out:
 	vm_unlock(&current_vm_locked);
 	return ret;
 }
+
+/**
+ * Handle special direct messages from SPMD to SPMC. For now related to power
+ * management only.
+ */
+static bool spmd_handler(struct ffa_value *args, struct vcpu *current)
+{
+	ffa_vm_id_t spmc_ffa_id = arch_other_world_get_ffa_id();
+	ffa_vm_id_t sender = ffa_msg_send_sender(*args);
+	ffa_vm_id_t receiver = ffa_msg_send_receiver(*args);
+	ffa_vm_id_t current_vm_id = current->vm->id;
+
+	if (!((sender == SPMD_ID) && (receiver == spmc_ffa_id) &&
+	      (current_vm_id == HF_OTHER_WORLD_ID))) {
+		return false;
+	}
+
+	switch (args->arg3) {
+	case PSCI_CPU_OFF:
+		dlog_verbose("%s cpu off notification\n", __func__);
+		args->func = FFA_MSG_SEND_DIRECT_RESP_32;
+		args->arg1 = ((uint64_t)spmc_ffa_id << 16) | SPMD_ID;
+		args->arg2 = 0U;
+
+		cpu_off(current->cpu);
+		break;
+	default:
+		dlog_verbose("%s message not handled %#x\n", __func__,
+			     args->arg3);
+		return false;
+	}
+
+	return true;
+}
+
 #endif
 
 /**
@@ -461,11 +498,17 @@ static bool ffa_handler(struct ffa_value *args, struct vcpu *current,
 					    (args->arg4 >> 16) & 0xffff,
 					    current);
 		return true;
-	case FFA_MSG_SEND_DIRECT_REQ_32:
+	case FFA_MSG_SEND_DIRECT_REQ_32: {
+#if SECURE_WORLD == 1
+		if (spmd_handler(args, current)) {
+			return true;
+		}
+#endif
 		*args = api_ffa_msg_send_direct_req(
 			ffa_msg_send_sender(*args),
 			ffa_msg_send_receiver(*args), *args, current, next);
 		return true;
+	}
 	case FFA_MSG_SEND_DIRECT_RESP_32:
 		*args = api_ffa_msg_send_direct_resp(
 			ffa_msg_send_sender(*args),
@@ -510,7 +553,9 @@ static void other_world_switch_loop(struct vcpu *other_world_vcpu,
 		 * the result of the call back to EL3 unless the API handler
 		 * sets *next to something different.
 		 */
-		if (!ffa_handler(&other_world_args, other_world_vcpu, next)) {
+
+		if (!spmd_handler(&other_world_args, other_world_vcpu) &&
+		    !ffa_handler(&other_world_args, other_world_vcpu, next)) {
 			other_world_args.func = SMCCC_ERROR_UNKNOWN;
 		}
 	}
