@@ -173,17 +173,20 @@ class Driver:
         platform."""
         return DriverRunState(self.args.artifacts.create_file(run_name, ".log"))
 
-    def exec_logged(self, run_state, exec_args, cwd=None):
+    def exec_logged(self, run_state, exec_args, cwd=None, stdin_file=None):
         """Run a subprocess on behalf of a Driver subclass and append its
         stdout and stderr to the main log."""
         assert(run_state.ret_code == 0)
-        with open(run_state.log_path, "a") as f:
-            f.write("$ {}\r\n".format(" ".join(exec_args)))
-            f.flush()
-            ret_code = subprocess.call(exec_args, stdout=f, stderr=f, cwd=cwd)
+        fin = open(stdin_file, "r") if stdin_file != None else None
+        with open(run_state.log_path, "a") as fout:
+            fout.write("$ {}\r\n".format(" ".join(exec_args)))
+            fout.flush()
+            ret_code = subprocess.call(exec_args, stdin=fin, stdout=fout, stderr=fout, cwd=cwd)
             if ret_code != 0:
                 run_state.set_ret_code(ret_code)
                 raise DriverRunException()
+        if stdin_file != None:
+            fin.close()
 
     def finish_run(self, run_state):
         """Hook called by Driver subclasses after they finished running the
@@ -265,6 +268,69 @@ class QemuDriver(Driver):
     def finish(self):
         """Clean up after running tests."""
         pass
+
+class QemuDriverSPMC(Driver):
+    """Driver which runs Hypervisor + SPMC tests in QEMU."""
+
+    def __init__(self, args, qemu_wd, tfa):
+        Driver.__init__(self, args)
+        self.qemu_wd = qemu_wd
+        self.tfa = tfa
+
+    def gen_exec_args(self, test_args, is_long_running):
+        """Generate command line arguments for QEMU."""
+        time_limit = "120s" if is_long_running else "10s"
+        # If no CPU configuration is selected, then test against the maximum
+        # configuration, "max", supported by QEMU.
+        cpu = self.args.cpu or "max"
+        exec_args = [
+            "timeout", "--foreground", time_limit,
+            os.path.abspath("prebuilts/linux-x64/qemu/qemu-system-aarch64"),
+            "-no-reboot", "-machine", "virt,virtualization=on,gic-version=3",
+            "-cpu", cpu, "-smp", "4", "-m", "1G",
+            "-nographic", "-nodefaults", "-serial", "stdio",
+            "-d", "unimp",
+            #"-kernel", os.path.abspath(self.args.hypervisor),
+        ]
+
+        if self.tfa:
+            bl1_path = os.path.join(
+                HF_PREBUILTS, "linux-aarch64", "trusted-firmware-a",
+                "qemu", "bl1.bin")
+            exec_args += ["-bios",
+                os.path.abspath(bl1_path),
+                "-machine", "secure=on", "-semihosting-config",
+                "enable=on,target=native"]
+
+        if self.args.initrd:
+            exec_args += ["-initrd", os.path.abspath(self.args.initrd)]
+
+        vm_args = join_if_not_None(self.args.vm_args, test_args)
+        #if vm_args:
+        #    exec_args += ["-append", vm_args]
+
+        return exec_args
+
+    def run(self, run_name, test_args, is_long_running):
+        """Run test given by `test_args` in QEMU."""
+        run_state = self.start_run(run_name)
+
+        try:
+            # Execute test in QEMU..
+            exec_args = self.gen_exec_args(test_args, is_long_running)
+            vm_args = join_if_not_None(self.args.vm_args, test_args)
+            with open("/tmp/cmd_input", "w+") as cmd_input:
+                cmd_input.write(f"{vm_args}\n")
+            self.exec_logged(run_state, exec_args,
+                cwd=self.qemu_wd, stdin_file="/tmp/cmd_input")
+        except DriverRunException:
+            pass
+
+        return self.finish_run(run_state)
+
+    def finish(self):
+        """Clean up after running tests."""
+        os.remove("/tmp/cmd_input")
 
 class FvpDriver(Driver, ABC):
     """Base class for driver which runs tests in Arm FVP emulator."""
@@ -896,13 +962,17 @@ def Main():
     parser.add_argument("--tfa", action="store_true")
     args = parser.parse_args()
 
+    if args.driver not in ["qemu", "fvp", "serial"]:
+            raise Exception("Unknown driver name: {}".format(args.driver))
+
     # Create class which will manage all test artifacts.
+    test_set_up = args.driver
     if args.hypervisor and args.spmc:
-        test_set_up = "hypervisor_and_spmc"
+        test_set_up += "_hypervisor_and_spmc"
     elif args.hypervisor:
-        test_set_up = "hypervisor"
+        test_set_up += "_hypervisor"
     elif args.spmc:
-        test_set_up = "spmc"
+        test_set_up += "_spmc"
     else:
         raise Exception("No Hafnium image provided!\n")
 
@@ -936,14 +1006,20 @@ def Main():
                              vm_args, args.cpu, partitions, global_run_name)
 
     if args.spmc:
-        # So far only FVP supports tests for SPMC.
-        if args.driver != "fvp":
-            raise Exception("Secure tests can only run with fvp driver")
-
-        if args.hypervisor:
-            driver = FvpDriverBothWorlds(driver_args)
+        if args.driver == "qemu":
+            if args.hypervisor:
+                raise Exception("Qemu Hypervisor + SPMC not supported.")
+            else:
+                out = os.path.dirname(args.spmc)
+                driver = QemuDriverSPMC(driver_args, out, args.tfa)
+        elif args.driver == "fvp":
+            if args.hypervisor:
+                driver = FvpDriverBothWorlds(driver_args)
+            else:
+                driver = FvpDriverSPMC(driver_args)
         else:
-            driver = FvpDriverSPMC(driver_args)
+            raise Exception("Unsupported driver.")
+
     elif args.hypervisor:
         if args.driver == "qemu":
             out = os.path.dirname(args.hypervisor)
@@ -953,8 +1029,6 @@ def Main():
         elif args.driver == "serial":
             driver = SerialDriver(driver_args, args.serial_dev,
                     args.serial_baudrate, not args.serial_no_init_wait)
-        else:
-            raise Exception("Unknown driver name: {}".format(args.driver))
     else:
         raise Exception("No Hafnium image provided!\n")
 

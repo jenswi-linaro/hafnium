@@ -1,0 +1,48 @@
+/*
+ * Copyright 2022 The Hafnium Authors.
+ *
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file or at
+ * https://opensource.org/licenses/BSD-3-Clause.
+ */
+
+/dts-v1/;
+
+/ {
+	compatible = "arm,ffa-manifest-1.0";
+	debug_name = "partition-manifest";
+
+	/* Properties */
+	ffa-version = <0x00010001>; /* 31:16 - Major, 15:0 - Minor */
+	uuid = <0xb4b5671e 0x4a904fe1 0xb81ffb13 0xdae1dacb>;
+	execution-ctx-count = <1>;
+	exception-level = <2>; /* S-EL1 */
+	execution-state = <0>; /* AARCH64 */
+	load-address = <0xe300000>;
+	entrypoint-offset = <0x2000>;
+	xlat-granule = <0>; /* 4KiB */
+	messaging-method = <0>;
+	gp-register-num = <0>;
+
+	/* Boot Info */
+	boot-info {
+		compatible = "arm,ffa-manifest-boot-info";
+		ffa_manifest;
+	};
+
+	device-regions {
+		compatible = "arm,ffa-manifest-device-regions";
+
+		/* TODO: use VIRT_SECURE_UART at 0x09040000? */
+		qemu-virt-uart {
+			base-address = <0x00000000 0x9000000>;
+			pages-count = <1>;
+			attributes = <0x3>; /* read-write */
+		};
+		qemu-virt-pl061 {
+			base-address = <0x00000000 0x90b0000>;
+			pages-count = <1>;
+			attributes = <0x3>; /* read-write */
+		};
+	};
+};

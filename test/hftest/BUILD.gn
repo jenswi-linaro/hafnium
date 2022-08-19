@@ -246,6 +246,36 @@ source_set("hftest_standalone_secure") {
   ]
 }
 
+source_set("qemu_hftest_standalone_secure") {
+  testonly = true
+
+  public_configs = [
+    "//src/arch/aarch64:arch_config",
+    ":hftest_config",
+  ]
+
+  sources = [
+    "qemu_standalone_main_secure.c",
+  ]
+
+  deps = [
+    ":common",
+    ":mm",
+    ":power_mgmt",
+    "//src:dlog",
+    "//src:fdt",
+    "//src:fdt_handler",
+    "//src:memiter",
+    "//src/arch/${plat_arch}:entry",
+    "//src/arch/${plat_arch}/hftest:entry",
+    "//src/arch/${plat_arch}/hftest:interrupts",
+    "//src/arch/${plat_arch}/hftest:power_mgmt",
+    "//test/hftest:ctrl_uart",
+    "//vmlib/${plat_arch}:call",
+    hftest_device,
+  ]
+}
+
 # Common code for hftest, whether it is running under Linux, under Hafnium in
 # the primary VM, or directly on the hardware.
 source_set("common") {

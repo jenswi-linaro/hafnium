@@ -47,6 +47,17 @@ copy("tfa_trusty_copy") {
   ]
 }
 
+copy("tfa_secure_qemu_copy") {
+  sources = [
+    "//prebuilts/linux-aarch64/trusted-firmware-a/qemu/bl1.bin",
+    "//prebuilts/linux-aarch64/trusted-firmware-a/qemu/bl2.bin",
+    "//prebuilts/linux-aarch64/trusted-firmware-a/qemu/bl31.bin",
+  ]
+  outputs = [
+    "$root_out_dir/{{source_file_part}}",
+  ]
+}
+
 copy("qemuloader_copy") {
   sources = [
     "$root_out_dir/qemuloader.bin",
@@ -56,6 +67,26 @@ copy("qemuloader_copy") {
   ]
   outputs = [
     "$root_out_dir/bl33.bin",
+  ]
+}
+
+copy("hafnium_copy") {
+  sources = [
+    "$root_out_dir/hafnium.bin",
+  ]
+  deps = [
+    "//src:hafnium",
+  ]
+  outputs = [
+    "$root_out_dir/bl32.bin",
+  ]
+}
+
+group("bl_secure") {
+  deps = [
+    ":hafnium_copy",
+    ":qemuloader_copy",
+    ":tfa_secure_qemu_copy",
   ]
 }
 

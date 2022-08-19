@@ -22,9 +22,28 @@ vm_kernel("secure_partition_test_vm") {
   ]
 }
 
+vm_kernel("qemu_secure_partition_test_vm") {
+  testonly = true
+
+  sources = [
+    "secure_partition.c",
+  ]
+
+  deps = [
+    "//test/hftest:qemu_hftest_standalone_secure",
+    "//test/vmapi/common",
+  ]
+}
+
 manifest("ffa_secure_partition_only_partition_manifest") {
   source = "partition-manifest.dts"
   output = "partition-manifest.dtb"
+  overlay = hftest_manifest_overlay
+}
+
+manifest("qemu_ffa_secure_partition_only_partition_manifest") {
+  source = "qemu-partition-manifest.dts"
+  output = "qemu-partition-manifest.dtb"
   overlay = hftest_manifest_overlay
 }
 
@@ -41,6 +60,19 @@ partition_package("ffa_secure_partition_only_test_package") {
   output = "ffa_secure_partition_only_test_package.img"
 }
 
+partition_package("qemu_ffa_secure_partition_only_test_package") {
+  testonly = true
+  pm_offset = "0x1000"
+  img_offset = "0x2000"
+  files = [ [
+        "qemu-partition-manifest.dtb",
+        "qemu_secure_partition_test_vm.bin",
+        ":qemu_ffa_secure_partition_only_partition_manifest",
+        ":qemu_secure_partition_test_vm",
+      ] ]
+  output = "qemu_ffa_secure_partition_only_test_package.img"
+}
+
 partitions_json("ffa_secure_partition_only_test") {
   testonly = true
 
@@ -52,4 +84,17 @@ partitions_json("ffa_secure_partition_only_test") {
       ] ]
   vms = []
   json_file = "ffa_secure_partition_only_test.json"
+}
+
+partitions_json("qemu_ffa_secure_partition_only_test") {
+  testonly = true
+
+  sps = [ [
+        "qemu_ffa_secure_partition_only_test_package.img",
+        "manifest.dts",
+        ":qemu_ffa_secure_partition_only_test_package",
+        ":qemu_ffa_secure_partition_only_partition_manifest",
+      ] ]
+  vms = []
+  json_file = "qemu_ffa_secure_partition_only_test.json"
 }

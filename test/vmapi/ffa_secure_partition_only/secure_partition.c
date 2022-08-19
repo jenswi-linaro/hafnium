@@ -427,6 +427,8 @@ TEST(ffa_console_log, invalid_parameters)
 	EXPECT_FFA_ERROR(ffa_call(req), FFA_INVALID_PARAMETERS);
 }
 
+/* TODO: skipped for qemu. */
+#if 0
 /**
  * Validate a S-EL1 partition can enable/disable alignment checks.
  */
@@ -456,3 +458,4 @@ TEST(arch_features, vm_unaligned_access)
 
 	EXPECT_EQ(exception_handler_get_num(), 1);
 }
+#endif

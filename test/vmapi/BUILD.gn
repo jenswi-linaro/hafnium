@@ -13,6 +13,7 @@ group("partitions") {
     "arch/${plat_arch}:arch",
     "common:common",
     "ffa_secure_partition_only:ffa_secure_partition_only_test",
+    "ffa_secure_partition_only:qemu_ffa_secure_partition_only_test",
     "ffa_secure_partitions:ffa_both_world_partitions_test",
     "ffa_secure_partitions:ffa_both_world_partitions_vhe_test",
   ]
