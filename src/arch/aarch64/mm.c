@@ -773,6 +773,7 @@ bool arch_mm_init(paddr_t table)
 	uint32_t pa_bits = arch_mm_get_pa_range();
 	uint32_t extend_bits;
 	uint32_t sl0;
+	uint32_t ps = features & 0xf;
 
 	/* Check that 4KB granules are supported. */
 	if (((features >> 28) & 0xf) == 0xf) {
@@ -794,6 +795,7 @@ bool arch_mm_init(paddr_t table)
 			"52-bit PA size not supported,"
 			" falling back to 48-bit\n");
 		pa_bits = 48;
+		ps = 0x5; /* 0b101 */
 	}
 
 	dlog_info("Supported bits in physical address: %d\n", pa_bits);
@@ -864,7 +866,7 @@ bool arch_mm_init(paddr_t table)
 		.vtcr_el2 =
 			(1U << 31) |		   /* RES1. */
 			(nsa_nsw << 29) |	   /* NSA/NSW. */
-			((features & 0xf) << 16) | /* PS, matching features. */
+			(ps << 16) |		   /* PS, matching features. */
 			(0 << 14) |		   /* TG0: 4 KB granule. */
 			(3 << 12) |		   /* SH0: inner shareable. */
 			(1 << 10) |  /* ORGN0: normal, cacheable ... */
@@ -939,7 +941,7 @@ bool arch_mm_init(paddr_t table)
 	} else {
 		arch_mm_config.tcr_el2 =
 			(1 << 20) |		   /* TBI, top byte ignored. */
-			((features & 0xf) << 16) | /* PS. */
+			(ps << 16) |		   /* PS. */
 			(0 << 14) |		   /* TG0, granule size, 4KB. */
 			(3 << 12) |		   /* SH0, inner shareable. */
 			(1 << 10) | /* ORGN0, normal mem, WB RA WA Cacheable. */
