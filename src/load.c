@@ -669,6 +669,7 @@ static bool load_secondary(struct mm_stage1_locked stage1_locked,
 	const size_t mem_size = pa_difference(mem_begin, mem_end);
 	uint32_t map_mode;
 	bool is_el0_partition = manifest_vm->partition.run_time_el == S_EL0;
+	size_t n;
 
 	/*
 	 * Load the kernel if a filename is specified in the VM manifest.
@@ -817,6 +818,19 @@ static bool load_secondary(struct mm_stage1_locked stage1_locked,
 	}
 
 	vcpu_unlock(&vcpu_locked);
+
+	/*
+	 * The primary vcpu0 was initialized with the call to
+	 * plat_ffa_enable_virtual_maintenance_interrupts() above, but the
+	 * secondaries must to be initialized too. For now do it here just
+	 * after the call to vcpu_secondary_reset_and_start().
+	 */
+	for (n = 1; n < manifest_vm->secondary.vcpu_count; n++) {
+		vcpu = vm_get_vcpu(vm, n);
+		vcpu_locked = vcpu_lock(vcpu);
+		plat_ffa_enable_virtual_maintenance_interrupts(vcpu_locked);
+		vcpu_unlock(&vcpu_locked);
+	}
 
 	ret = true;
 
